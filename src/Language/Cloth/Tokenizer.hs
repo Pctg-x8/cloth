@@ -1,7 +1,7 @@
 {-# LANGUAGE ViewPatterns, OverloadedStrings #-}
 
 module Language.Cloth.Tokenizer (
-  tokenize, tokenizeAll, Located(..), Location(..), intoLocated, location, item, Token(..)
+  tokenize, tokenizeAll, Located(..), Location(..), intoLocated, location, item, Token(..), NumberTok(..)
 ) where
 
 import qualified Data.Text as T
@@ -12,9 +12,10 @@ import Control.Applicative (Alternative(..))
 import Debug.Trace ()
 import Language.Cloth.Location
 
-data Token = Int Text | Float Text Text | IntH Text | FloatH Text Text |
-  IntB Text | FloatB Text Text | IntO Text | FloatO Text Text |
-  Op Text | Ident Text | EOF deriving (Show, Eq)
+data Token = Number NumberTok |  Op Text | Ident Text | EOF | LeftParenthese | RightParenthese | Backquote
+  deriving (Show, Eq)
+data NumberTok = Decimal Text (Maybe Text) | Hexadecimal Text (Maybe Text) |
+  Binary Text (Maybe Text) | Octadecimal Text (Maybe Text) deriving (Show, Eq)
 
 tokenize :: Located Text -> Maybe (Located Token, Located Text)
 tokenize = either (const Nothing) Just . runCharParser tokparse
@@ -27,26 +28,32 @@ tokenizeAll t = case tokenize t of
 tokparse :: CharParser (Located Token)
 tokparse = CharParser $ \t -> case t of
   ((T.null -> True) :@: p) -> Right (EOF :@: p, t)
-  ((T.stripPrefix "0x" . T.toLower -> Just tr) :@: p) -> runCharParser (nparse (IntH, FloatH) isHexDigit) (tr :@: p)
-  ((T.stripPrefix "0o" . T.toLower -> Just tr) :@: p) -> runCharParser (nparse (IntO, FloatO) isOctDigit) (tr :@: p)
+  ((T.stripPrefix "0x" . T.toLower -> Just tr) :@: p) -> runCharParser (nparse Hexadecimal isHexDigit) (tr :@: p)
+  ((T.stripPrefix "0o" . T.toLower -> Just tr) :@: p) -> runCharParser (nparse Octadecimal isOctDigit) (tr :@: p)
   ((T.stripPrefix "0b" . T.toLower -> Just tr) :@: p) ->
-    let isBinDigit x = x == '0' || x == '1' in runCharParser (nparse (IntB, FloatB) isBinDigit) (tr :@: p)
+    let isBinDigit x = x == '0' || x == '1' in runCharParser (nparse Binary isBinDigit) (tr :@: p)
   ((T.uncons -> Just (c, tr)) :@: p)
     | c == '\n' -> runCharParser tokparse (tr :@: advanceLine p)
     | isSpace c -> runCharParser tokparse (tr :@: advanceLeft p)
     | c == '#' -> runCharParser (parseUntilNorEmpty (== '\n') >> tokparse) (tr :@: advanceLeft p)
-    | isDigit c -> runCharParser (nparse (Int, Float) isDigit) t
-    | isSymbolChar c -> runCharParser (fmap Op <$> parseWhile isSymbolChar) t
+    | c == '`' -> return (Backquote :@: p, tr :@: advanceLeft p)
+    | isDigit c -> runCharParser (nparse Decimal isDigit) t
+    | isSymbolChar c -> runCharParser (fmap resolveSpecialSymbols <$> parseWhile isSymbolChar) t
     | isLower c || isUpper c || c == '_' || c == '\'' ->
       runCharParser (fmap Ident <$> parseWhile (isLower <||> isUpper <||> isNumber <||> (== '_') <||> (== '\''))) t
     | otherwise -> Left t
   _ -> Left t
-nparse :: ((Text -> Token), (Text -> Text -> Token)) -> (Char -> Bool) -> CharParser (Located Token)
-nparse (ictor, fctor) digitPredicate =
-  ((<*>) <$> (fmap fctor <$> parseWhile digitPredicate) <*> (parseChar '.' *> parseWhile digitPredicate)) <|>
-  (fmap ictor <$> parseWhile digitPredicate)
+nparse :: (Text -> Maybe Text -> NumberTok) -> (Char -> Bool) -> CharParser (Located Token)
+nparse nctor digitPredicate = fmap Number <$> (fparse <|> iparse) where
+  fparse, iparse :: CharParser (Located NumberTok)
+  fparse = (<*>) <$> (fmap nctor <$> parseWhile digitPredicate) <*> (fmap Just <$> (parseChar '.' *> parseWhile digitPredicate))
+  iparse = fmap (flip nctor Nothing) <$> parseWhile digitPredicate
 isSymbolChar :: Char -> Bool
 isSymbolChar c = T.any (== c) "!#$%&*+./<=>?@\\^-|~:" || isPunctuation c || isSymbol c
+resolveSpecialSymbols :: Text -> Token
+resolveSpecialSymbols "(" = LeftParenthese
+resolveSpecialSymbols ")" = RightParenthese
+resolveSpecialSymbols t = Op t
 
 -- Combining Predicates
 (<||>) :: (a -> Bool) -> (a -> Bool) -> a -> Bool
