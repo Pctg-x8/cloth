@@ -53,4 +53,4 @@ main = hspec $ do
       item . fst <$> runParser expr (tokenizeAll $ intoLocated "[a..]") `shouldBe` Right (ArithmeticSeq (Var "a" :@: Location 1 2) Nothing Nothing)
       item . fst <$> runParser expr (tokenizeAll $ intoLocated "[a, b..]") `shouldBe` Right (ArithmeticSeq (Var "a" :@: Location 1 2) (Just $ Var "b" :@: Location 1 5) Nothing)
     it "parses complex expression" $
-      isRight $ runParser expr (tokenizeAll $ intoLocated "fconv <$> [0,1..2] `shouldBe` [2, 4, 6]")
+      isRight $ runParser expr (tokenizeAll $ intoLocated "(fconv . (+ 2)) <$> [0,1..2] `shouldBe` [2, 4, 6]")
