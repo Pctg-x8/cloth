@@ -33,6 +33,8 @@ main = hspec $ do
     it "parses basic expression factors" $ do
       item . fst <$> runParser factorExpr (tokenizeAll (intoLocated "2")) `shouldBe` Right (P.Number $ Decimal "2" Nothing)
       item . fst <$> runParser factorExpr (tokenizeAll (intoLocated "a")) `shouldBe` Right (Var "a")
-    it "parses infix expression at correct position" $
+    it "parses infix expression at correct position" $ do
       fst <$> runParser infixExpr (tokenizeAll (intoLocated "2 + 3")) `shouldBe`
         Right ((Infix (P.Number $ Decimal "2" Nothing) "+" (P.Number $ Decimal "3" Nothing)) :@: def)
+      item . fst <$> runParser infixExpr (tokenizeAll (intoLocated "a `shouldBe` b")) `shouldBe`
+        Right (Infix (Var "a") "shouldBe" (Var "b"))
