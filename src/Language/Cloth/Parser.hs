@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Language.Cloth.Parser (Expr(..), factorExpr, infixExpr, Parser(runParser)) where
+module Language.Cloth.Parser (Expr(..), factorExpr, infixExpr, applyExpr, Parser(runParser)) where
 
 import Language.Cloth.Location
 import qualified Language.Cloth.Tokenizer as Tok
@@ -9,16 +9,19 @@ import Control.Applicative
 import Control.Arrow (first)
 import Data.Text (Text)
 
-data Expr = Var Text | Number Tok.NumberTok | Infix Expr Text Expr | Neg Expr deriving (Eq, Show)
+data Expr = Var Text | Number Tok.NumberTok | Infix Expr Text Expr | Neg Expr | Apply Expr Expr deriving (Eq, Show)
 
-factorExpr, infixExpr :: Parser (Located Expr)
+factorExpr, infixExpr, applyExpr :: Parser (Located Expr)
 op :: Parser (Located Text)
 negop :: Parser ()
 factorExpr = Parser $ \ts -> case ts of
   ((Tok.Ident  t :@: p) : tr) -> Right (Var t :@: p, tr)
   ((Tok.Number n :@: p) : tr) -> Right (Number n :@: p, tr)
   _ -> Left ts
-infixExpr = (liftA3 Infix <$> factorExpr <*> op <*> infixExpr) <|> (negop >> fmap Neg <$> factorExpr) <|> factorExpr
+applyExpr = factorExpr >>= recurse where
+  recurse :: Located Expr -> Parser (Located Expr)
+  recurse lhs = ((liftA2 Apply lhs <$> factorExpr) >>= recurse) <|> return lhs
+infixExpr = (liftA3 Infix <$> applyExpr <*> op <*> infixExpr) <|> (negop >> fmap Neg <$> applyExpr) <|> applyExpr
 op = Parser $ \ts -> case ts of
   ((Tok.Backquote :@: _) : (Tok.Ident t :@: p) : (Tok.Backquote :@: _) : tr) -> Right (t :@: p, tr)
   ((Tok.Op t :@: p) : tr) -> Right (t :@: p, tr)
