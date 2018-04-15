@@ -31,7 +31,7 @@ factorExpr = Parser $ \ts -> case ts of
       aseq = do
         initial <- expr; next <- opt (match (Tok.Op ",") *> expr); match Tok.RangeOp; fin <- opt expr;
         match Tok.RightBracket *> (return $ ArithmeticSeq initial next fin)
-    in runParser ((:@: p) <$> (aseq <|> ((List <$> exprList) <* match Tok.RightBracket))) tr' 
+    in runParser ((:@: p) <$> (aseq <|> ((List <$> exprList) <* match Tok.RightBracket))) tr'
   _ -> Left ts
 applyExpr = factorExpr >>= recurse where
   recurse :: Located Expr -> Parser (Located Expr)
