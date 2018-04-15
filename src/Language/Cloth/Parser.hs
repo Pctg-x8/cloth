@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Language.Cloth.Parser (Expr(..), factorExpr, infixExpr, Parser(runParser)) where
 
 import Language.Cloth.Location
@@ -7,19 +9,21 @@ import Control.Applicative
 import Control.Arrow (first)
 import Data.Text (Text)
 
-data Expr = Var Text | Number Tok.NumberTok | Infix Expr Text Expr deriving (Eq, Show)
+data Expr = Var Text | Number Tok.NumberTok | Infix Expr Text Expr | Neg Expr deriving (Eq, Show)
 
 factorExpr, infixExpr :: Parser (Located Expr)
 op :: Parser (Located Text)
+negop :: Parser ()
 factorExpr = Parser $ \ts -> case ts of
-  ((Tok.Ident t :@: p) : tr) -> Right (Var t :@: p, tr)
+  ((Tok.Ident  t :@: p) : tr) -> Right (Var t :@: p, tr)
   ((Tok.Number n :@: p) : tr) -> Right (Number n :@: p, tr)
   _ -> Left ts
-infixExpr = (liftA3 Infix <$> factorExpr <*> op <*> infixExpr) <|> factorExpr
+infixExpr = (liftA3 Infix <$> factorExpr <*> op <*> infixExpr) <|> (negop >> fmap Neg <$> factorExpr) <|> factorExpr
 op = Parser $ \ts -> case ts of
   ((Tok.Backquote :@: _) : (Tok.Ident t :@: p) : (Tok.Backquote :@: _) : tr) -> Right (t :@: p, tr)
   ((Tok.Op t :@: p) : tr) -> Right (t :@: p, tr)
   _ -> Left ts
+negop = Parser $ \ts -> case ts of ((Tok.Op "-" :@: _) : tr) -> Right ((), tr); _ -> Left ts
 
 newtype Parser a = Parser { runParser :: [Located Token] -> Either [Located Token] (a, [Located Token]) }
 instance Functor Parser where

@@ -38,3 +38,5 @@ main = hspec $ do
         Right ((Infix (P.Number $ Decimal "2" Nothing) "+" (P.Number $ Decimal "3" Nothing)) :@: def)
       item . fst <$> runParser infixExpr (tokenizeAll (intoLocated "a `shouldBe` b")) `shouldBe`
         Right (Infix (Var "a") "shouldBe" (Var "b"))
+    it "parses negating expression" $ do
+      item . fst <$> runParser infixExpr (tokenizeAll (intoLocated "-b")) `shouldBe` Right (Neg $ Var "b")
