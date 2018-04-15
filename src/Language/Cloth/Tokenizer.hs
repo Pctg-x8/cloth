@@ -37,8 +37,10 @@ tokparse = CharParser $ \t -> case t of
     | isSpace c -> runCharParser tokparse (tr :@: advanceLeft p)
     | c == '#' -> runCharParser (parseUntilNorEmpty (== '\n') >> tokparse) (tr :@: advanceLeft p)
     | c == '`' -> return (Backquote :@: p, tr :@: advanceLeft p)
+    | c == '(' -> return (LeftParenthese :@: p, tr :@: advanceLeft p)
+    | c == ')' -> return (RightParenthese :@: p, tr :@: advanceLeft p)
     | isDigit c -> runCharParser (nparse Decimal isDigit) t
-    | isSymbolChar c -> runCharParser (fmap resolveSpecialSymbols <$> parseWhile isSymbolChar) t
+    | isSymbolChar c -> runCharParser (fmap Op <$> parseWhile isSymbolChar) t
     | isLower c || isUpper c || c == '_' || c == '\'' ->
       runCharParser (fmap Ident <$> parseWhile (isLower <||> isUpper <||> isNumber <||> (== '_') <||> (== '\''))) t
     | otherwise -> Left t
@@ -49,11 +51,7 @@ nparse nctor digitPredicate = fmap Number <$> (fparse <|> iparse) where
   fparse = (<*>) <$> (fmap nctor <$> parseWhile digitPredicate) <*> (fmap Just <$> (parseChar '.' *> parseWhile digitPredicate))
   iparse = fmap (flip nctor Nothing) <$> parseWhile digitPredicate
 isSymbolChar :: Char -> Bool
-isSymbolChar c = T.any (== c) "!#$%&*+./<=>?@\\^-|~:" || isPunctuation c || isSymbol c
-resolveSpecialSymbols :: Text -> Token
-resolveSpecialSymbols "(" = LeftParenthese
-resolveSpecialSymbols ")" = RightParenthese
-resolveSpecialSymbols t = Op t
+isSymbolChar c = (T.any (== c) "!#$%&*+./<=>?@\\^-|~:" || isPunctuation c || isSymbol c) && not (T.any (== c) "()[]{}")
 
 -- Combining Predicates
 (<||>) :: (a -> Bool) -> (a -> Bool) -> a -> Bool

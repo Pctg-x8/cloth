@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Language.Cloth.Parser (Expr(..), factorExpr, infixExpr, applyExpr, Parser(runParser)) where
+module Language.Cloth.Parser (Expr(..), expr, Parser(runParser)) where
 
 import Language.Cloth.Location
 import qualified Language.Cloth.Tokenizer as Tok
@@ -9,19 +9,29 @@ import Control.Applicative
 import Control.Arrow (first)
 import Data.Text (Text)
 
-data Expr = Var Text | Number Tok.NumberTok | Infix Expr Text Expr | Neg Expr | Apply Expr Expr deriving (Eq, Show)
+data Expr = Var Text | Number Tok.NumberTok | Infix Expr Text Expr | Neg Expr | Apply Expr Expr |
+  RightSection Text Expr | LeftSection Expr Text
+  deriving (Eq, Show)
 
-factorExpr, infixExpr, applyExpr :: Parser (Located Expr)
-op :: Parser (Located Text)
-negop :: Parser ()
+factorExpr, infixExpr, applyExpr, expr :: Parser (Located Expr)
+expr = infixExpr
 factorExpr = Parser $ \ts -> case ts of
   ((Tok.Ident  t :@: p) : tr) -> Right (Var t :@: p, tr)
+  ((Tok.LeftParenthese :@: p) : (Tok.Op t :@: _) : (Tok.RightParenthese :@: _) : tr) -> Right (Var t :@: p, tr)
   ((Tok.Number n :@: p) : tr) -> Right (Number n :@: p, tr)
+  ((Tok.LeftParenthese :@: p) : tr') ->
+    let
+      sections = ((liftA2 LeftSection <$> infixExpr <*> op) <|> (liftA2 RightSection <$> op <*> infixExpr))
+        <* match Tok.RightParenthese
+    in runParser ((<@> p) <$> (sections <|> (expr <* match Tok.RightParenthese))) tr'
   _ -> Left ts
 applyExpr = factorExpr >>= recurse where
   recurse :: Located Expr -> Parser (Located Expr)
   recurse lhs = ((liftA2 Apply lhs <$> factorExpr) >>= recurse) <|> return lhs
 infixExpr = (liftA3 Infix <$> applyExpr <*> op <*> infixExpr) <|> (negop >> fmap Neg <$> applyExpr) <|> applyExpr
+
+op :: Parser (Located Text)
+negop :: Parser ()
 op = Parser $ \ts -> case ts of
   ((Tok.Backquote :@: _) : (Tok.Ident t :@: p) : (Tok.Backquote :@: _) : tr) -> Right (t :@: p, tr)
   ((Tok.Op t :@: p) : tr) -> Right (t :@: p, tr)
@@ -44,3 +54,6 @@ instance Monad Parser where
 instance Alternative Parser where
   empty = Parser Left
   a <|> b = Parser $ \ts -> either (const $ runParser b ts) Right $ runParser a ts
+
+match :: Token -> Parser Location
+match t = Parser $ \ts -> case ts of ((t' :@: p) : tr) | t' == t -> Right (p, tr); _ -> Left ts
