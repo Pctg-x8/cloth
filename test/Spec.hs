@@ -47,3 +47,7 @@ main = hspec $ do
       item . fst <$> runParser expr (tokenizeAll $ intoLocated "(a, b)") `shouldBe` Right (Tuple [Var "a" :@: Location 1 2, Var "b" :@: Location 1 5])
       item . fst <$> runParser expr (tokenizeAll $ intoLocated "(c)") `shouldBe` Right (Var "c")
       item . fst <$> runParser expr (tokenizeAll $ intoLocated "()") `shouldBe` Right Unit
+    it "parses lists" $ do
+      item . fst <$> runParser expr (tokenizeAll $ intoLocated "[a, b, c]") `shouldBe` Right (List [Var "a" :@: Location 1 2, Var "b" :@: Location 1 5, Var "c" :@: Location 1 8])
+      item . fst <$> runParser expr (tokenizeAll $ intoLocated "[a..]") `shouldBe` Right (ArithmeticSeq (Var "a" :@: Location 1 2) Nothing Nothing)
+      item . fst <$> runParser expr (tokenizeAll $ intoLocated "[a, b..]") `shouldBe` Right (ArithmeticSeq (Var "a" :@: Location 1 2) (Just $ Var "b" :@: Location 1 5) Nothing)

@@ -12,7 +12,8 @@ import Control.Applicative (Alternative(..))
 import Debug.Trace ()
 import Language.Cloth.Location
 
-data Token = Number NumberTok |  Op Text | Ident Text | EOF | LeftParenthese | RightParenthese | Backquote
+data Token = Number NumberTok |  Op Text | Ident Text | EOF | LeftParenthese | RightParenthese | Backquote |
+  LeftBracket | RightBracket | RangeOp
   deriving (Show, Eq)
 data NumberTok = Decimal Text (Maybe Text) | Hexadecimal Text (Maybe Text) |
   Binary Text (Maybe Text) | Octadecimal Text (Maybe Text) deriving (Show, Eq)
@@ -39,8 +40,11 @@ tokparse = CharParser $ \t -> case t of
     | c == '`' -> return (Backquote :@: p, tr :@: advanceLeft p)
     | c == '(' -> return (LeftParenthese :@: p, tr :@: advanceLeft p)
     | c == ')' -> return (RightParenthese :@: p, tr :@: advanceLeft p)
+    | c == '[' -> return (LeftBracket :@: p, tr :@: advanceLeft p)
+    | c == ']' -> return (RightBracket :@: p, tr :@: advanceLeft p)
     | isDigit c -> runCharParser (nparse Decimal isDigit) t
-    | isSymbolChar c -> runCharParser (fmap Op <$> parseWhile isSymbolChar) t
+    | isSymbolChar c -> let convOp tx = case tx of ".." -> RangeOp; _ -> Op tx in
+      runCharParser (fmap convOp <$> parseWhile isSymbolChar) t
     | isLower c || isUpper c || c == '_' || c == '\'' ->
       runCharParser (fmap Ident <$> parseWhile (isLower <||> isUpper <||> isNumber <||> (== '_') <||> (== '\''))) t
     | otherwise -> Left t

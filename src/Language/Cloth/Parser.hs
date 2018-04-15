@@ -10,7 +10,8 @@ import Control.Arrow (first)
 import Data.Text (Text)
 
 data Expr = Var Text | Number Tok.NumberTok | Infix Expr Text Expr | Neg Expr | Apply Expr Expr |
-  RightSection Text (Located Expr) | LeftSection Expr Text | Unit | Tuple [Located Expr]
+  RightSection Text (Located Expr) | LeftSection Expr Text | Unit | Tuple [Located Expr] |
+  List [Located Expr] | ArithmeticSeq (Located Expr) (Maybe (Located Expr)) (Maybe (Located Expr))
   deriving (Eq, Show)
 
 factorExpr, infixExpr, applyExpr, expr :: Parser (Located Expr)
@@ -25,6 +26,12 @@ factorExpr = Parser $ \ts -> case ts of
         <* match Tok.RightParenthese
       genTuple ts' = case ts' of [] -> Unit :@: p; [t] -> t; _ -> Tuple ts' :@: p
     in runParser ((<@> p) <$> (sections <|> ((genTuple <$> exprList) <* match Tok.RightParenthese))) tr'
+  ((Tok.LeftBracket :@: p) : tr') ->
+    let
+      aseq = do
+        initial <- expr; next <- opt (match (Tok.Op ",") *> expr); match Tok.RangeOp; fin <- opt expr;
+        match Tok.RightBracket *> (return $ ArithmeticSeq initial next fin)
+    in runParser ((:@: p) <$> (aseq <|> ((List <$> exprList) <* match Tok.RightBracket))) tr' 
   _ -> Left ts
 applyExpr = factorExpr >>= recurse where
   recurse :: Located Expr -> Parser (Located Expr)
@@ -62,3 +69,5 @@ instance Alternative Parser where
 
 match :: Token -> Parser Location
 match t = Parser $ \ts -> case ts of ((t' :@: p) : tr) | t' == t -> Right (p, tr); _ -> Left ts
+opt :: Parser a -> Parser (Maybe a)
+opt p = (return <$> p) <|> return Nothing
