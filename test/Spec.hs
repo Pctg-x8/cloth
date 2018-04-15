@@ -5,6 +5,7 @@ import qualified Language.Cloth.Tokenizer as Tok
 import Language.Cloth.Tokenizer
 import qualified Language.Cloth.Parser as P
 import Language.Cloth.Parser
+import Data.Default (def)
 
 main :: IO ()
 main = hspec $ do
@@ -32,6 +33,6 @@ main = hspec $ do
     it "parses basic expression factors" $ do
       item . fst <$> runParser factorExpr (tokenizeAll (intoLocated "2")) `shouldBe` Right (P.Number $ Decimal "2" Nothing)
       item . fst <$> runParser factorExpr (tokenizeAll (intoLocated "a")) `shouldBe` Right (Var "a")
-    it "parses infix expression" $
-      item . fst <$> runParser infixExpr (tokenizeAll (intoLocated "2 + 3")) `shouldBe`
-        Right (Infix (P.Number $ Decimal "2" Nothing) "+" (P.Number $ Decimal "3" Nothing))
+    it "parses infix expression at correct position" $
+      fst <$> runParser infixExpr (tokenizeAll (intoLocated "2 + 3")) `shouldBe`
+        Right ((Infix (P.Number $ Decimal "2" Nothing) "+" (P.Number $ Decimal "3" Nothing)) :@: def)
