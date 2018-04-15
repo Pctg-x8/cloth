@@ -43,3 +43,7 @@ main = hspec $ do
     it "parses applying" $ do
       item . fst <$> runParser expr (tokenizeAll (intoLocated "f x")) `shouldBe` Right (Apply (Var "f") (Var "x"))
       item . fst <$> runParser expr (tokenizeAll $ intoLocated "(+) 3") `shouldBe` Right (Apply (Var "+") (P.Number $ Decimal "3" Nothing))
+    it "parses tuple, expression or unit" $ do
+      item . fst <$> runParser expr (tokenizeAll $ intoLocated "(a, b)") `shouldBe` Right (Tuple [Var "a" :@: Location 1 2, Var "b" :@: Location 1 5])
+      item . fst <$> runParser expr (tokenizeAll $ intoLocated "(c)") `shouldBe` Right (Var "c")
+      item . fst <$> runParser expr (tokenizeAll $ intoLocated "()") `shouldBe` Right Unit

@@ -10,7 +10,7 @@ import Control.Arrow (first)
 import Data.Text (Text)
 
 data Expr = Var Text | Number Tok.NumberTok | Infix Expr Text Expr | Neg Expr | Apply Expr Expr |
-  RightSection Text Expr | LeftSection Expr Text
+  RightSection Text (Located Expr) | LeftSection Expr Text | Unit | Tuple [Located Expr]
   deriving (Eq, Show)
 
 factorExpr, infixExpr, applyExpr, expr :: Parser (Located Expr)
@@ -21,19 +21,24 @@ factorExpr = Parser $ \ts -> case ts of
   ((Tok.Number n :@: p) : tr) -> Right (Number n :@: p, tr)
   ((Tok.LeftParenthese :@: p) : tr') ->
     let
-      sections = ((liftA2 LeftSection <$> infixExpr <*> op) <|> (liftA2 RightSection <$> op <*> infixExpr))
+      sections = ((liftA2 LeftSection <$> infixExpr <*> op) <|> ((:@: p) <$> (RightSection <$> (item <$> op) <*> infixExpr)))
         <* match Tok.RightParenthese
-    in runParser ((<@> p) <$> (sections <|> (expr <* match Tok.RightParenthese))) tr'
+      genTuple ts' = case ts' of [] -> Unit :@: p; [t] -> t; _ -> Tuple ts' :@: p
+    in runParser ((<@> p) <$> (sections <|> ((genTuple <$> exprList) <* match Tok.RightParenthese))) tr'
   _ -> Left ts
 applyExpr = factorExpr >>= recurse where
   recurse :: Located Expr -> Parser (Located Expr)
   recurse lhs = ((liftA2 Apply lhs <$> factorExpr) >>= recurse) <|> return lhs
 infixExpr = (liftA3 Infix <$> applyExpr <*> op <*> infixExpr) <|> (negop >> fmap Neg <$> applyExpr) <|> applyExpr
 
+exprList :: Parser [Located Expr]
+exprList = ((:) <$> expr <*> many (match (Tok.Op ",") *> expr)) <|> return []
+
 op :: Parser (Located Text)
 negop :: Parser ()
 op = Parser $ \ts -> case ts of
   ((Tok.Backquote :@: _) : (Tok.Ident t :@: p) : (Tok.Backquote :@: _) : tr) -> Right (t :@: p, tr)
+  ((Tok.Op "," :@: _) : _) -> Left ts
   ((Tok.Op t :@: p) : tr) -> Right (t :@: p, tr)
   _ -> Left ts
 negop = Parser $ \ts -> case ts of ((Tok.Op "-" :@: _) : tr) -> Right ((), tr); _ -> Left ts
