@@ -36,9 +36,9 @@ main = hspec $ do
       item . fst <$> runParser expr (tokenizeAll (intoLocated "a")) `shouldBe` Right (Var "a")
     it "parses infix expression at correct position" $ do
       fst <$> runParser expr (tokenizeAll (intoLocated "2 + 3")) `shouldBe`
-        Right ((Infix (P.Number $ Decimal "2" Nothing) "+" (P.Number $ Decimal "3" Nothing)) :@: def)
+        Right (Infix (P.Number $ Decimal "2" Nothing) [("+", P.Number $ Decimal "3" Nothing) :@: Location 1 3] :@: def)
       item . fst <$> runParser expr (tokenizeAll (intoLocated "a `shouldBe` b")) `shouldBe`
-        Right (Infix (Var "a") "shouldBe" (Var "b"))
+        Right (Infix (Var "a") [("shouldBe", Var "b") :@: Location 1 4])
     it "parses negating expression" $ do
       item . fst <$> runParser expr (tokenizeAll (intoLocated "-b")) `shouldBe` Right (Neg $ Var "b")
     it "parses applying" $ do

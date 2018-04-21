@@ -9,7 +9,7 @@ import Control.Applicative
 import Control.Arrow (first)
 import Data.Text (Text)
 
-data Expr = Var Text | Number Tok.NumberTok | Infix Expr Text Expr | Neg Expr | Apply Expr Expr |
+data Expr = Var Text | Number Tok.NumberTok | Infix Expr [Located (Text, Expr)] | Neg Expr | Apply Expr Expr |
   RightSection Text (Located Expr) | LeftSection Expr Text | Unit | Tuple [Located Expr] |
   List [Located Expr] | ArithmeticSeq (Located Expr) (Maybe (Located Expr)) (Maybe (Located Expr))
   deriving (Eq, Show)
@@ -36,7 +36,7 @@ factorExpr = Parser $ \ts -> case ts of
 applyExpr = factorExpr >>= recurse where
   recurse :: Located Expr -> Parser (Located Expr)
   recurse lhs = ((liftA2 Apply lhs <$> factorExpr) >>= recurse) <|> return lhs
-infixExpr = (liftA3 Infix <$> applyExpr <*> op <*> infixExpr) <|> (negop >> fmap Neg <$> applyExpr) <|> applyExpr
+infixExpr = (liftA2 Infix <$> applyExpr <*> (pure <$> some (liftA2 (,) <$> op <*> applyExpr))) <|> (negop >> fmap Neg <$> applyExpr) <|> applyExpr
 
 exprList :: Parser [Located Expr]
 exprList = ((:) <$> expr <*> many (match (Tok.Op ",") *> expr)) <|> return []
