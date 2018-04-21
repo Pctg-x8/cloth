@@ -28,9 +28,7 @@ factorExpr = Parser $ \ts -> case ts of
     in runParser ((<@> p) <$> (sections <|> ((genTuple <$> exprList) <* match Tok.RightParenthese))) tr'
   ((Tok.LeftBracket :@: p) : tr') ->
     let
-      aseq = do
-        initial <- expr; next <- opt (match (Tok.Op ",") *> expr); match Tok.RangeOp; fin <- opt expr;
-        match Tok.RightBracket *> (return $ ArithmeticSeq initial next fin)
+      aseq = (ArithmeticSeq <$> expr <*> opt (match (Tok.Op ",") *> expr) <*> (match Tok.RangeOp *> opt expr)) <* match Tok.RightBracket
     in runParser ((:@: p) <$> (aseq <|> ((List <$> exprList) <* match Tok.RightBracket))) tr'
   _ -> Left ts
 applyExpr = factorExpr >>= recurse where
