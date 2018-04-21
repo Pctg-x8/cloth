@@ -69,5 +69,5 @@ instance Alternative Parser where
 
 match :: Token -> Parser Location
 match t = Parser $ \ts -> case ts of ((t' :@: p) : tr) | t' == t -> Right (p, tr); _ -> Left ts
-opt :: Parser a -> Parser (Maybe a)
-opt p = (return <$> p) <|> return Nothing
+opt :: (Applicative a, Alternative a) => Parser x -> Parser (a x)
+opt p = (pure <$> p) <|> pure empty
