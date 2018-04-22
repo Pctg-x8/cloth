@@ -1,7 +1,7 @@
 {-# LANGUAGE ViewPatterns, OverloadedStrings #-}
 
 module Language.Cloth.Tokenizer (
-  tokenize, tokenizeAll, Located(..), Location(..), intoLocated, location, item, Token(..), NumberTok(..)
+  tokenize, tokenizeAll, Located(..), Location(..), intoLocated, location, item, Token(..), NumberTok(..), KeywordKind(..)
 ) where
 
 import qualified Data.Text as T
@@ -12,11 +12,34 @@ import Control.Applicative (Alternative(..))
 import Debug.Trace ()
 import Language.Cloth.Location
 
-data Token = Number NumberTok |  Op Text | Ident Text | EOF | LeftParenthese | RightParenthese | Backquote |
-  LeftBracket | RightBracket | RangeOp
+data Token = Number NumberTok | Op Text | Ident Text | EOF | LeftParenthese | RightParenthese | Backquote |
+  LeftBracket | RightBracket | LeftBrace | RightBrace | Semicolon | RangeOp | Keyword KeywordKind
+  deriving (Show, Eq)
+data KeywordKind = Where | Do | Let | In | Case | Of | While | For | Import | Package | Deriving |
+  Class | Object | Trait | Struct | Then | Else
   deriving (Show, Eq)
 data NumberTok = Decimal Text (Maybe Text) | Hexadecimal Text (Maybe Text) |
   Binary Text (Maybe Text) | Octadecimal Text (Maybe Text) deriving (Show, Eq)
+keywording :: Text -> Either Text KeywordKind
+keywording t = case t of
+  "where" -> Right Where
+  "do" -> Right Do
+  "let" -> Right Let
+  "in" -> Right In
+  "case" -> Right Case
+  "of" -> Right Of
+  "while" -> Right While
+  "for" -> Right For
+  "import" -> Right Import
+  "package" -> Right Package
+  "deriving" -> Right Deriving
+  "class" -> Right Class
+  "object" -> Right Object
+  "trait" -> Right Trait
+  "struct" -> Right Struct
+  "then" -> Right Then
+  "else" -> Right Else
+  _ -> Left t
 
 tokenize :: Located Text -> Maybe (Located Token, Located Text)
 tokenize = either (const Nothing) Just . runCharParser tokparse
@@ -42,11 +65,15 @@ tokparse = CharParser $ \t -> case t of
     | c == ')' -> return (RightParenthese :@: p, tr :@: advanceLeft p)
     | c == '[' -> return (LeftBracket :@: p, tr :@: advanceLeft p)
     | c == ']' -> return (RightBracket :@: p, tr :@: advanceLeft p)
+    | c == '{' -> return (LeftBrace :@: p, tr :@: advanceLeft p)
+    | c == '}' -> return (RightBrace :@: p, tr :@: advanceLeft p)
+    | c == ';' -> return (Semicolon :@: p, tr :@: advanceLeft p)
     | isDigit c -> runCharParser (nparse Decimal isDigit) t
     | isSymbolChar c -> let convOp tx = case tx of ".." -> RangeOp; _ -> Op tx in
       runCharParser (fmap convOp <$> parseWhile isSymbolChar) t
     | isLower c || isUpper c || c == '_' || c == '\'' ->
-      runCharParser (fmap Ident <$> parseWhile (isLower <||> isUpper <||> isNumber <||> (== '_') <||> (== '\''))) t
+      runCharParser (fmap (either Ident Keyword . keywording) <$>
+        parseWhile (isLower <||> isUpper <||> isNumber <||> (== '_') <||> (== '\''))) t
     | otherwise -> Left t
   _ -> Left t
 nparse :: (Text -> Maybe Text -> NumberTok) -> (Char -> Bool) -> CharParser (Located Token)
