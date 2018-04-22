@@ -4,18 +4,22 @@ module Language.Cloth.Parser (Expr(..), Pat(..), parseLayout, expr, pat, package
 
 import Language.Cloth.Location
 import qualified Language.Cloth.Tokenizer as Tok
-import Language.Cloth.Tokenizer (Token(..), KeywordKind(..))
+import Language.Cloth.Tokenizer (Token(..), KeywordKind(..), NumberTok)
 import Control.Applicative
 import Control.Arrow (first)
 import Control.Monad (void)
 import Data.Text (Text)
+import Debug.Trace (trace)
 
-data Expr = Var Text | Num Tok.NumberTok | Infix Expr [Located (Text, Expr)] | Neg Expr | Apply Expr Expr |
+data Expr = Var Text | Num NumberTok | Infix Expr [Located (Text, Expr)] | Neg Expr | Apply Expr Expr |
   RightSection Text (Located Expr) | LeftSection Expr Text | Unit | Tuple [Located Expr] |
   List [Located Expr] | ArithmeticSeq (Located Expr) (Maybe (Located Expr)) (Maybe (Located Expr))
   deriving (Eq, Show)
-data Pat = VarP Text | AsP Text (Located Pat) | NumP Tok.NumberTok
+data Pat = VarP Text | AsP Text (Located Pat) | NumP NumberTok | ListP [Located Pat] | UnitP |
+  TupleP [Located Pat] | WildcardP | DataP DataConstructor [Located Pat] | NegativeNumP Tok.NumberTok |
+  InfixP Pat [Located (Text, Pat)]
   deriving (Eq, Show)
+data DataConstructor = DataConstructor Text | ListConstructor | TupleConstructor Int deriving (Eq, Show)
 
 data Lexeme = Tok Token | Bracketed | Angular
 indent :: Located Lexeme -> Int
@@ -65,28 +69,58 @@ factorExpr = Parser $ \ts -> case ts of
       sections = ((liftA2 LeftSection <$> infixExpr <*> op) <|> ((:@: p) <$> (RightSection <$> (item <$> op) <*> infixExpr)))
         <* match Tok.RightParenthese
       genTuple ts' = case ts' of [] -> Unit :@: p; [t] -> t; _ -> Tuple ts' :@: p
-    in runParser ((<@> p) <$> (sections <|> ((genTuple <$> exprList) <* match Tok.RightParenthese))) tr'
+      tuplecons = genTuple <$> (opt $ intersperse (Op ",") expr)
+    in runParser ((<@> p) <$> (sections <|> (tuplecons <* match Tok.RightParenthese))) tr'
   ((Tok.LeftBracket :@: p) : tr') ->
     let
       aseq = (ArithmeticSeq <$> expr <*> optv (match (Tok.Op ",") *> expr) <*> (match Tok.RangeOp *> optv expr)) <* match Tok.RightBracket
-    in runParser ((:@: p) <$> (aseq <|> ((List <$> exprList) <* match Tok.RightBracket))) tr'
+      list = List <$> (opt $ intersperse (Op ",") expr)
+    in runParser ((:@: p) <$> (aseq <|> (list <* match Tok.RightBracket))) tr'
   _ -> Left ts
 applyExpr = factorExpr >>= recurse where
-  recurse :: Located Expr -> Parser (Located Expr)
   recurse lhs = ((liftA2 Apply lhs <$> factorExpr) >>= recurse) <|> return lhs
-infixExpr = (liftA2 Infix <$> applyExpr <*> (pure <$> some (liftA2 (,) <$> op <*> applyExpr))) <|> (negop >> fmap Neg <$> applyExpr) <|> applyExpr
+infixExpr = ((\(e, ps) -> Infix <$> e <*> pure [(a, b) :@: p | ((a :@: p), (b :@: _)) <- ps]) <$> intercalate1 op applyExpr)
+  <|> (negop >> fmap Neg <$> applyExpr) <|> applyExpr
 
-factorPat, pat :: Parser (Located Pat)
-pat = factorPat
+factorPat, prefixPat, infixPat, pat :: Parser (Located Pat)
+pat = infixPat
+infixPat = ((\(e, ps) -> InfixP <$> e <*> pure [(a, b) :@: p | ((a :@: p), (b :@: _)) <- ps]) <$> intercalate1 op prefixPat) <|> prefixPat
+prefixPat = negativePat <|> maybeDataPat where
+  negativePat = liftA NegativeNumP <$> (match (Op "-") *> num)
+  maybeDataPat = Parser ps where
+    ps ts = runParser (pp ts) ts
+    pp ts = case ts of
+      ((Ident _ :@: _) : (Atmark :@: _) : tr) -> factorPat
+      _ -> (liftA2 dataP <$> ctor <*> (pure <$> many factorPat)) <|> factorPat
+    dataP (DataConstructor "_") [] = WildcardP
+    dataP (DataConstructor c) [] = VarP c
+    dataP a b = DataP a b
 factorPat = Parser $ \ts -> case ts of
-  ((Ident t :@: p) : (Tok.Op "@" :@: _) : tr) -> runParser ((:@: p) <$> (AsP t <$> pat)) tr
+  ((Ident "_" :@: _) : (Atmark :@: _) : tr) -> runParser factorPat tr
+  ((Ident t :@: p) : (Atmark :@: _) : tr) -> runParser ((:@: p) <$> (AsP t <$> factorPat)) tr
+  ((Ident "_" :@: p) : tr) -> Right (WildcardP :@: p, tr)
   ((Ident t :@: p) : tr) -> Right (VarP t :@: p, tr)
   ((Tok.Number n :@: p) : tr) -> Right (NumP n :@: p, tr)
+  ((LeftParenthese :@: p) : tr') ->
+    let
+      genTuple ts' = case ts' of [] -> UnitP :@: p; [t] -> t; _ -> TupleP ts' :@: p
+    in runParser ((<@> p) <$> (genTuple <$> (opt $ intersperse (Op ",") pat)) <* match RightParenthese) tr'
+  ((LeftBracket :@: p) : tr') -> let listPat = ListP <$> (opt $ intersperse (Op ",") pat) in
+    runParser ((:@: p) <$> (listPat <* match RightBracket)) tr'
   _ -> Left ts
 
-exprList :: Parser [Located Expr]
-exprList = opt $ intersperse (Tok.Op ",") expr
+ctor :: Parser (Located DataConstructor)
+ctor = Parser $ \ts -> case ts of
+  ((Ident t :@: p) : tr) -> Right (DataConstructor t :@: p, tr)
+  ((LeftBracket :@: p) : (RightBracket :@: _) : tr) -> Right (ListConstructor :@: p, tr)
+  ((LeftParenthese :@: p) : tr) ->
+    runParser ((:@: p) <$> (TupleConstructor . length) <$> some (match $ Op ",") <* match RightParenthese) tr
+  _ -> Left ts
 
+num :: Parser (Located NumberTok)
+num = Parser $ \ts -> case ts of
+  ((Tok.Number n :@: p) : tr) -> Right (n :@: p, tr)
+  _ -> Left ts
 op :: Parser (Located Text)
 negop :: Parser ()
 op = Parser $ \ts -> case ts of
@@ -119,3 +153,8 @@ optv = opt . fmap pure
 opt p = p <|> pure empty
 intersperse :: Token -> Parser a -> Parser [a]
 intersperse tk p = ((:) <$> p <*> many (match tk *> p))
+intercalate, intercalate1 :: Parser a -> Parser b -> Parser (b, [(a, b)])
+intercalate a b = (,) <$> b <*> many ((,) <$> a <*> b)
+intercalate1 a b = (,) <$> b <*> some ((,) <$> a <*> b)
+parserTrace :: Show s => s -> Parser ()
+parserTrace head = Parser $ \ts -> trace (show head ++ show ts) $ return ((), ts)

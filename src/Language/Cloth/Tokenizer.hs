@@ -83,7 +83,7 @@ nparse nctor digitPredicate = fmap Number <$> (fparse <|> iparse) where
   fparse = (<*>) <$> (fmap nctor <$> parseWhile digitPredicate) <*> (fmap Just <$> (parseChar '.' *> parseWhile digitPredicate))
   iparse = fmap (flip nctor Nothing) <$> parseWhile digitPredicate
 isSymbolChar :: Char -> Bool
-isSymbolChar c = (T.any (== c) "!#$%&*+./<=>?@\\^-|~:" || isPunctuation c || isSymbol c) && not (T.any (== c) "()[]{}")
+isSymbolChar c = (T.any (== c) "!#$%&*+./<=>?@\\^-|~:" || isPunctuation c || isSymbol c) && not (T.any (== c) "()[]{}_")
 
 -- Combining Predicates
 (<||>) :: (a -> Bool) -> (a -> Bool) -> a -> Bool

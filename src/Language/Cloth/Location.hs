@@ -1,5 +1,6 @@
 module Language.Cloth.Location(
-  Location(..), Located(..), advanceLeft, advanceLine, location, item, intoLocated, (<@>), changeLocationTo
+  Location(..), Located(..), advanceLeft, advanceLine, location, item, intoLocated, (<@>), changeLocationTo,
+  fstLocation
 ) where
 
 import Data.Default (Default(..))
@@ -26,3 +27,5 @@ intoLocated a = a :@: def
 (v :@: _) <@> p = v :@: p
 changeLocationTo :: Location -> Located a -> Located a
 changeLocationTo = flip (<@>)
+fstLocation :: (Located a, Located b) -> Located (a, b)
+fstLocation (a :@: p, b :@: _) = (a, b) :@: p

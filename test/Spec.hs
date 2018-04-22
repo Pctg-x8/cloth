@@ -57,7 +57,11 @@ main = hspec $ do
       isRight $ runParser packageBlock (parseLayout $ tokenizeAll $ intoLocated "(fconv . (+ 2)) <$> [0,1..2] `shouldBe` [2, 4, 6]")
     it "parses basic patterns" $ do
       item . fst <$> (runParser pat $ tokenizeAll $ intoLocated "test") `shouldBe` Right (P.VarP "test")
+      item . fst <$> (runParser pat $ tokenizeAll $ intoLocated "(test)") `shouldBe` Right (P.VarP "test")
       item . fst <$> (runParser pat $ tokenizeAll $ intoLocated "2") `shouldBe` Right (P.NumP $ Decimal "2" Nothing)
+    it "parses complex patterns" $ do
+      (isRight $ runParser pat $ tokenizeAll $ intoLocated "Cons 2 :@: p") `shouldBe` True
+      (isRight $ runParser pat $ tokenizeAll $ intoLocated "(_ : t0@(TokParse2 a b) : ts)") `shouldBe` True
 
 parseText :: Parser a -> Text -> Either [Located Token] (a, [Located Token])
 parseText p = runParser p . parseLayout . tokenizeAll . intoLocated
