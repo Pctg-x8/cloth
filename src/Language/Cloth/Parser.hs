@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Language.Cloth.Parser (Expr(..), parseLayout, expr, packageBlock, Parser(runParser)) where
+module Language.Cloth.Parser (Expr(..), Pat(..), parseLayout, expr, pat, packageBlock, Parser(runParser)) where
 
 import Language.Cloth.Location
 import qualified Language.Cloth.Tokenizer as Tok
@@ -13,6 +13,8 @@ import Data.Text (Text)
 data Expr = Var Text | Num Tok.NumberTok | Infix Expr [Located (Text, Expr)] | Neg Expr | Apply Expr Expr |
   RightSection Text (Located Expr) | LeftSection Expr Text | Unit | Tuple [Located Expr] |
   List [Located Expr] | ArithmeticSeq (Located Expr) (Maybe (Located Expr)) (Maybe (Located Expr))
+  deriving (Eq, Show)
+data Pat = VarP Text | AsP Text (Located Pat) | NumP Tok.NumberTok
   deriving (Eq, Show)
 
 data Lexeme = Tok Token | Bracketed | Angular
@@ -73,6 +75,14 @@ applyExpr = factorExpr >>= recurse where
   recurse :: Located Expr -> Parser (Located Expr)
   recurse lhs = ((liftA2 Apply lhs <$> factorExpr) >>= recurse) <|> return lhs
 infixExpr = (liftA2 Infix <$> applyExpr <*> (pure <$> some (liftA2 (,) <$> op <*> applyExpr))) <|> (negop >> fmap Neg <$> applyExpr) <|> applyExpr
+
+factorPat, pat :: Parser (Located Pat)
+pat = factorPat
+factorPat = Parser $ \ts -> case ts of
+  ((Ident t :@: p) : (Tok.Op "@" :@: _) : tr) -> runParser ((:@: p) <$> (AsP t <$> pat)) tr
+  ((Ident t :@: p) : tr) -> Right (VarP t :@: p, tr)
+  ((Tok.Number n :@: p) : tr) -> Right (NumP n :@: p, tr)
+  _ -> Left ts
 
 exprList :: Parser [Located Expr]
 exprList = opt $ intersperse (Tok.Op ",") expr

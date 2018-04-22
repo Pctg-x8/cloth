@@ -40,7 +40,7 @@ main = hspec $ do
         Right [Infix (P.Num $ Decimal "2" Nothing) [("+", P.Num $ Decimal "3" Nothing) :@: Location 1 3] :@: def]
       fmap item . fst <$> parseText packageBlock "a `shouldBe` b" `shouldBe`
         Right [Infix (Var "a") [("shouldBe", Var "b") :@: Location 1 4]]
-    it "parses negating expression" $ do
+    it "parses negating expression" $
       fmap item . fst <$> parseText packageBlock "-b" `shouldBe` Right [Neg $ Var "b"]
     it "parses applying" $ do
       fmap item . fst <$> parseText packageBlock "f x" `shouldBe` Right [Apply (Var "f") (Var "x")]
@@ -55,6 +55,9 @@ main = hspec $ do
       fmap item . fst <$> parseText packageBlock "[a, b..]" `shouldBe` Right [ArithmeticSeq (Var "a" :@: Location 1 2) (Just $ Var "b" :@: Location 1 5) Nothing]
     it "parses complex expression" $
       isRight $ runParser packageBlock (parseLayout $ tokenizeAll $ intoLocated "(fconv . (+ 2)) <$> [0,1..2] `shouldBe` [2, 4, 6]")
+    it "parses basic patterns" $ do
+      item . fst <$> (runParser pat $ tokenizeAll $ intoLocated "test") `shouldBe` Right (P.VarP "test")
+      item . fst <$> (runParser pat $ tokenizeAll $ intoLocated "2") `shouldBe` Right (P.NumP $ Decimal "2" Nothing)
 
 parseText :: Parser a -> Text -> Either [Located Token] (a, [Located Token])
 parseText p = runParser p . parseLayout . tokenizeAll . intoLocated

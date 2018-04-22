@@ -13,7 +13,7 @@ import Debug.Trace ()
 import Language.Cloth.Location
 
 data Token = Number NumberTok | Op Text | Ident Text | EOF | LeftParenthese | RightParenthese | Backquote |
-  LeftBracket | RightBracket | LeftBrace | RightBrace | Semicolon | RangeOp | Keyword KeywordKind
+  LeftBracket | RightBracket | LeftBrace | RightBrace | Semicolon | RangeOp | Keyword KeywordKind | Atmark
   deriving (Show, Eq)
 data KeywordKind = Where | Do | Let | In | Case | Of | While | For | Import | Package | Deriving |
   Class | Object | Trait | Struct | Then | Else
@@ -68,6 +68,7 @@ tokparse = CharParser $ \t -> case t of
     | c == '{' -> return (LeftBrace :@: p, tr :@: advanceLeft p)
     | c == '}' -> return (RightBrace :@: p, tr :@: advanceLeft p)
     | c == ';' -> return (Semicolon :@: p, tr :@: advanceLeft p)
+    | c == '@' -> return (Atmark :@: p, tr :@: advanceLeft p)
     | isDigit c -> runCharParser (nparse Decimal isDigit) t
     | isSymbolChar c -> let convOp tx = case tx of ".." -> RangeOp; _ -> Op tx in
       runCharParser (fmap convOp <$> parseWhile isSymbolChar) t
