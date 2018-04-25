@@ -1,7 +1,8 @@
 {-# LANGUAGE ViewPatterns, OverloadedStrings #-}
 
 module Language.Cloth.Tokenizer (
-  tokenize, tokenizeAll, Located(..), Location(..), intoLocated, location, item, Token(..), NumberTok(..), KeywordKind(..)
+  tokenize, tokenizeAll, Located(..), Location(..), intoLocated, location, item, Token(..), NumberTok(..),
+  KeywordKind(..), SpecialOps(..)
 ) where
 
 import qualified Data.Text as T
@@ -13,10 +14,13 @@ import Debug.Trace ()
 import Language.Cloth.Location
 
 data Token = Number NumberTok | Op Text | Ident Text | EOF | LeftParenthese | RightParenthese | Backquote |
-  LeftBracket | RightBracket | LeftBrace | RightBrace | Semicolon | RangeOp | Keyword KeywordKind | Atmark
+  LeftBracket | RightBracket | LeftBrace | RightBrace | Semicolon | Keyword KeywordKind | Atmark |
+  SpecialOp SpecialOps
   deriving (Show, Eq)
 data KeywordKind = Where | Do | Let | In | Case | Of | While | For | Import | Package | Deriving |
   Class | Object | Trait | Struct | Then | Else
+  deriving (Show, Eq)
+data SpecialOps = ArrowOp | MetaHintOp | RangeOp | EqualOp
   deriving (Show, Eq)
 data NumberTok = Decimal Text (Maybe Text) | Hexadecimal Text (Maybe Text) |
   Binary Text (Maybe Text) | Octadecimal Text (Maybe Text) deriving (Show, Eq)
@@ -39,6 +43,13 @@ keywording t = case t of
   "struct" -> Right Struct
   "then" -> Right Then
   "else" -> Right Else
+  _ -> Left t
+specialOp :: Text -> Either Text SpecialOps
+specialOp t = case t of
+  "->" -> Right ArrowOp
+  "::" -> Right MetaHintOp
+  ".." -> Right RangeOp
+  "=" -> Right EqualOp
   _ -> Left t
 
 tokenize :: Located Text -> Maybe (Located Token, Located Text)
@@ -70,8 +81,8 @@ tokparse = CharParser $ \t -> case t of
     | c == ';' -> return (Semicolon :@: p, tr :@: advanceLeft p)
     | c == '@' -> return (Atmark :@: p, tr :@: advanceLeft p)
     | isDigit c -> runCharParser (nparse Decimal isDigit) t
-    | isSymbolChar c -> let convOp tx = case tx of ".." -> RangeOp; _ -> Op tx in
-      runCharParser (fmap convOp <$> parseWhile isSymbolChar) t
+    | isSymbolChar c ->
+      runCharParser (fmap (either Op SpecialOp . specialOp) <$> parseWhile isSymbolChar) t
     | isLower c || isUpper c || c == '_' || c == '\'' ->
       runCharParser (fmap (either Ident Keyword . keywording) <$>
         parseWhile (isLower <||> isUpper <||> isNumber <||> (== '_') <||> (== '\''))) t

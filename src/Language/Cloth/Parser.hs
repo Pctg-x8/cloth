@@ -1,10 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Language.Cloth.Parser (Expr(..), Pat(..), parseLayout, expr, pat, packageBlock, Parser(runParser)) where
+module Language.Cloth.Parser (Expr(..), Pat(..), Stmt(..), parseLayout, expr, pat, packageBlock, Parser(runParser)) where
 
 import Language.Cloth.Location
 import qualified Language.Cloth.Tokenizer as Tok
-import Language.Cloth.Tokenizer (Token(..), KeywordKind(..), NumberTok)
+import Language.Cloth.Tokenizer (Token(..), KeywordKind(..), NumberTok, SpecialOps(..))
 import Control.Applicative
 import Control.Arrow (first)
 import Control.Monad (void)
@@ -36,7 +36,7 @@ lexemes ts = if all (/= (item $ head ts)) [LeftBrace, Keyword Package]
         = (Tok <$> t0) : (Angular :@: location t1) : lexemes' (t1 : ts)
     lexemes' (t : ts) = (Tok <$> t) : lexemes' ts
     lexemes' [] = []
-    blockProvider = [Keyword Do, Keyword Where, Keyword Let, Keyword Of, Keyword Then, Keyword Else]
+    blockProvider = [Keyword Do, Keyword Where, Keyword Tok.Let, Keyword Of, Keyword Then, Keyword Else]
 parseLayout :: [Located Token] -> [Located Token]
 parseLayout = flip go [] . lexemes where
   go ((Angular :@: p) : ts) (m : ms)
@@ -54,10 +54,19 @@ parseLayout = flip go [] . lexemes where
   go [] [] = []
   go [] (m : ms) | m /= 0 = (RightBrace :@: Location 0 m) : go [] ms
 
-packageBlock :: Parser [Located Expr]
+packageBlock :: Parser [Located Stmt]
 packageBlock = do
-  decls <- match LeftBrace *> intersperse Semicolon expr
+  decls <- match LeftBrace *> intersperse Semicolon stmt
   match RightBrace *> return decls
+
+data Ty = IdentT Text | ApplyT Ty Ty deriving (Show, Eq)
+data Stmt = ValueExpr Expr | Binding [Located (Pat, Maybe Ty, Expr)] deriving (Show, Eq)
+stmt :: Parser (Located Stmt)
+stmt = lettings <|> (fmap ValueExpr <$> expr) where
+  lettings = do
+    firstLocation <- match (Keyword Tok.Let) <* match Tok.LeftBrace
+    bindings <- intersperse Semicolon ((,,) <$> pat <*> pure Nothing <*> (match (SpecialOp EqualOp) *> expr)) <* match Tok.RightBrace
+    return $ Binding [(a, b, c) :@: p | (a :@: p, b, c :@: _) <- bindings] :@: firstLocation
 factorExpr, infixExpr, applyExpr, expr :: Parser (Located Expr)
 expr = infixExpr
 factorExpr = Parser $ \ts -> case ts of
@@ -73,7 +82,7 @@ factorExpr = Parser $ \ts -> case ts of
     in runParser ((<@> p) <$> (sections <|> (tuplecons <* match Tok.RightParenthese))) tr'
   ((Tok.LeftBracket :@: p) : tr') ->
     let
-      aseq = (ArithmeticSeq <$> expr <*> optv (match (Tok.Op ",") *> expr) <*> (match Tok.RangeOp *> optv expr)) <* match Tok.RightBracket
+      aseq = (ArithmeticSeq <$> expr <*> optv (match (Tok.Op ",") *> expr) <*> (match (SpecialOp RangeOp) *> optv expr)) <* match Tok.RightBracket
       list = List <$> (opt $ intersperse (Op ",") expr)
     in runParser ((:@: p) <$> (aseq <|> (list <* match Tok.RightBracket))) tr'
   _ -> Left ts
