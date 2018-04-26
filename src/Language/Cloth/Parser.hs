@@ -15,10 +15,6 @@ data Expr = Var Text | Num NumberTok | Infix Expr [Located (Text, Expr)] | Neg E
   RightSection Text (Located Expr) | LeftSection Expr Text | Unit | Tuple [Located Expr] |
   List [Located Expr] | ArithmeticSeq (Located Expr) (Maybe (Located Expr)) (Maybe (Located Expr))
   deriving (Eq, Show)
-data Pat = VarP Text | AsP Text (Located Pat) | NumP NumberTok | ListP [Located Pat] | UnitP |
-  TupleP [Located Pat] | WildcardP | DataP DataConstructor [Located Pat] | NegativeNumP Tok.NumberTok |
-  InfixP Pat [Located (Text, Pat)]
-  deriving (Eq, Show)
 data DataConstructor = DataConstructor Text | ListConstructor | TupleConstructor Int deriving (Eq, Show)
 
 data Lexeme = Tok Token | Bracketed | Angular
@@ -91,6 +87,10 @@ applyExpr = factorExpr >>= recurse where
 infixExpr = ((\(e, ps) -> Infix <$> e <*> pure [(a, b) :@: p | ((a :@: p), (b :@: _)) <- ps]) <$> intercalate1 op applyExpr)
   <|> (negop >> fmap Neg <$> applyExpr) <|> applyExpr
 
+data Pat = VarP Text | AsP Text (Located Pat) | NumP NumberTok | ListP [Located Pat] | UnitP |
+  TupleP [Located Pat] | WildcardP | DataP DataConstructor [Located Pat] | NegativeNumP Tok.NumberTok |
+  InfixP Pat [Located (Text, Pat)]
+  deriving (Eq, Show)
 factorPat, prefixPat, infixPat, pat :: Parser (Located Pat)
 pat = infixPat
 infixPat = ((\(e, ps) -> InfixP <$> e <*> pure [(a, b) :@: p | ((a :@: p), (b :@: _)) <- ps]) <$> intercalate1 op prefixPat) <|> prefixPat
