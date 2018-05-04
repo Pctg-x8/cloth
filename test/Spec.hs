@@ -63,7 +63,9 @@ main = hspec $ do
       (isRight $ runParser pat $ tokenizeAll $ intoLocated "Cons 2 :@: p") `shouldBe` True
       (isRight $ runParser pat $ tokenizeAll $ intoLocated "(_ : t0@(TokParse2 a b) : ts)") `shouldBe` True
     it "parses let bindings" $ do
-      (isRight $ parseText packageBlock "let c = 2; f x = x + 3") `shouldBe` True
+      (isRight $ parseText packageBlock "let c = 2") `shouldBe` True
+    it "parses do block" $ do
+      (const () <$> parseText packageBlock "let c = do { let d = 0; d * 3.0 }") `shouldBe` Right ()
 
 parseText :: Parser a -> Text -> Either [Located Token] (a, [Located Token])
 parseText p = runParser p . parseLayout . tokenizeAll . intoLocated

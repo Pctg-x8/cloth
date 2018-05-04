@@ -13,7 +13,8 @@ import Debug.Trace (trace)
 
 data Expr = Var Text | Num NumberTok | Infix Expr [Located (Text, Expr)] | Neg Expr | Apply Expr Expr |
   RightSection Text (Located Expr) | LeftSection Expr Text | Unit | Tuple [Located Expr] |
-  List [Located Expr] | ArithmeticSeq (Located Expr) (Maybe (Located Expr)) (Maybe (Located Expr))
+  List [Located Expr] | ArithmeticSeq (Located Expr) (Maybe (Located Expr)) (Maybe (Located Expr)) |
+  DoBlock [Located Stmt]
   deriving (Eq, Show)
 data DataConstructor = DataConstructor Text | ListConstructor | TupleConstructor Int deriving (Eq, Show)
 
@@ -32,7 +33,7 @@ lexemes ts = if all (/= (item $ head ts)) [LeftBrace, Keyword Package]
         = (Tok <$> t0) : (Angular :@: location t1) : lexemes' (t1 : ts)
     lexemes' (t : ts) = (Tok <$> t) : lexemes' ts
     lexemes' [] = []
-    blockProvider = [Keyword Do, Keyword Where, Keyword Tok.Let, Keyword Of, Keyword Then, Keyword Else]
+    blockProvider = [Keyword Do, Keyword Where, Keyword Of, Keyword Then, Keyword Else]
 parseLayout :: [Located Token] -> [Located Token]
 parseLayout = flip go [] . lexemes where
   go ((Angular :@: p) : ts) (m : ms)
@@ -56,14 +57,15 @@ packageBlock = do
   match RightBrace *> return decls
 
 data Ty = IdentT Text | ApplyT Ty Ty deriving (Show, Eq)
-data Stmt = ValueExpr Expr | Binding [Located (Pat, Maybe Ty, Expr)] deriving (Show, Eq)
+data Stmt = ValueExpr Expr | Binding (Located (Pat, Maybe Ty, Expr)) deriving (Show, Eq)
 stmt :: Parser (Located Stmt)
 stmt = lettings <|> (fmap ValueExpr <$> expr) where
   lettings = do
-    firstLocation <- match (Keyword Tok.Let) <* match Tok.LeftBrace
-    bindings <- intersperse Semicolon ((,,) <$> pat <*> pure Nothing <*> (match (SpecialOp EqualOp) *> expr)) <* match Tok.RightBrace
-    return $ Binding [(a, b, c) :@: p | (a :@: p, b, c :@: _) <- bindings] :@: firstLocation
-factorExpr, infixExpr, applyExpr, expr :: Parser (Located Expr)
+    firstLocation <- match (Keyword Tok.Let)
+    pat' :@: p <- pat
+    expr' :@: _ <- match (SpecialOp EqualOp) *> expr
+    return (Binding ((pat', Nothing, expr') :@: p) :@: firstLocation)
+factorExpr, infixExpr, cExpr, applyExpr, expr :: Parser (Located Expr)
 expr = infixExpr
 factorExpr = Parser $ \ts -> case ts of
   ((Tok.Ident  t :@: p) : tr) -> Right (Var t :@: p, tr)
@@ -84,8 +86,11 @@ factorExpr = Parser $ \ts -> case ts of
   _ -> Left ts
 applyExpr = factorExpr >>= recurse where
   recurse lhs = ((liftA2 Apply lhs <$> factorExpr) >>= recurse) <|> return lhs
-infixExpr = ((\(e, ps) -> Infix <$> e <*> pure [(a, b) :@: p | ((a :@: p), (b :@: _)) <- ps]) <$> intercalate1 op applyExpr)
-  <|> (negop >> fmap Neg <$> applyExpr) <|> applyExpr
+infixExpr = ((\(e, ps) -> Infix <$> e <*> pure [(a, b) :@: p | ((a :@: p), (b :@: _)) <- ps]) <$> intercalate1 op cExpr)
+  <|> (negop >> fmap Neg <$> cExpr) <|> cExpr
+cExpr = Parser $ \ts -> case ts of
+  ((Tok.Keyword Do :@: p) : tr) -> runParser ((:@: p) <$> DoBlock <$> (match LeftBrace *> intersperse Semicolon stmt <* match RightBrace)) tr
+  _ -> runParser applyExpr ts
 
 data Pat = VarP Text | AsP Text (Located Pat) | NumP NumberTok | ListP [Located Pat] | UnitP |
   TupleP [Located Pat] | WildcardP | DataP DataConstructor [Located Pat] | NegativeNumP Tok.NumberTok |
