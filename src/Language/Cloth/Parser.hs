@@ -14,7 +14,7 @@ import Debug.Trace (trace)
 data Expr = Var Text | Num NumberTok | Infix Expr [Located (Text, Expr)] | Neg Expr | Apply Expr Expr |
   RightSection Text (Located Expr) | LeftSection Expr Text | Unit | Tuple [Located Expr] |
   List [Located Expr] | ArithmeticSeq (Located Expr) (Maybe (Located Expr)) (Maybe (Located Expr)) |
-  DoBlock [Located Stmt]
+  DoBlock [Located Stmt] | Conditional (Located Expr) [Located Stmt] [Located Stmt]
   deriving (Eq, Show)
 data DataConstructor = DataConstructor Text | ListConstructor | TupleConstructor Int deriving (Eq, Show)
 
@@ -46,10 +46,11 @@ parseLayout = flip go [] . lexemes where
   go ((Tok RightBrace :@: p) : ts) (0 : ms) = (RightBrace :@: p) : go ts ms
   go ((Tok RightBrace :@: p) : ts) ms = error "Layout error"
   go ((Tok LeftBrace :@: p) : ts) ms = (LeftBrace :@: p) : go ts (0 : ms)
-  go ((Tok t :@: p) : ts) (m : ms) | m /= 0 && False{-stub-} = (RightBrace :@: p) : go ((Tok t :@: p) : ts) ms
+  go ((Tok t :@: p) : ts) (m : ms) | m /= 0 && any (== t) blockTerm = (RightBrace :@: p) : go ((Tok t :@: p) : ts) ms
   go ((Tok t :@: p) : ts) ms = (t :@: p) : go ts ms
   go [] [] = []
   go [] (m : ms) | m /= 0 = (RightBrace :@: Location 0 m) : go [] ms
+  blockTerm = [Keyword Else]
 
 packageBlock :: Parser [Located Stmt]
 packageBlock = do
@@ -89,7 +90,10 @@ applyExpr = factorExpr >>= recurse where
 infixExpr = ((\(e, ps) -> Infix <$> e <*> pure [(a, b) :@: p | ((a :@: p), (b :@: _)) <- ps]) <$> intercalate1 op cExpr)
   <|> (negop >> fmap Neg <$> cExpr) <|> cExpr
 cExpr = Parser $ \ts -> case ts of
-  ((Tok.Keyword Do :@: p) : tr) -> runParser ((:@: p) <$> DoBlock <$> (match LeftBrace *> intersperse Semicolon stmt <* match RightBrace)) tr
+  ((Tok.Keyword Do :@: p) : tr) -> runParser ((:@: p) <$> DoBlock <$> blocked stmt) tr
+  ((Tok.Keyword If :@: p) : tr) -> runParser
+    ((:@: p) <$> (Conditional <$> expr <*> (match (Keyword Then) *> blocked stmt) <*> opt (match (Keyword Else) *> blocked stmt)))
+    tr
   _ -> runParser applyExpr ts
 
 data Pat = VarP Text | AsP Text (Located Pat) | NumP NumberTok | ListP [Located Pat] | UnitP |
@@ -170,5 +174,7 @@ intersperse tk p = ((:) <$> p <*> many (match tk *> p))
 intercalate, intercalate1 :: Parser a -> Parser b -> Parser (b, [(a, b)])
 intercalate a b = (,) <$> b <*> many ((,) <$> a <*> b)
 intercalate1 a b = (,) <$> b <*> some ((,) <$> a <*> b)
+blocked :: Parser a -> Parser [a]
+blocked p = match LeftBrace *> intersperse Semicolon p <* match RightBrace
 parserTrace :: Show s => s -> Parser ()
 parserTrace head = Parser $ \ts -> trace (show head ++ show ts) $ return ((), ts)

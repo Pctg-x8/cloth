@@ -66,6 +66,8 @@ main = hspec $ do
       (isRight $ parseText packageBlock "let c = 2") `shouldBe` True
     it "parses do block" $ do
       (const () <$> parseText packageBlock "let c = do { let d = 0; d * 3.0 }") `shouldBe` Right ()
+    it "parses conditional expr" $
+      (const () <$> parseText packageBlock "if f x == 2 then 0 else 2") `shouldBe` Right ()
 
 parseText :: Parser a -> Text -> Either [Located Token] (a, [Located Token])
 parseText p = runParser p . parseLayout . tokenizeAll . intoLocated

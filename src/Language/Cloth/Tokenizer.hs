@@ -18,7 +18,7 @@ data Token = Number NumberTok | Op Text | Ident Text | EOF | LeftParenthese | Ri
   SpecialOp SpecialOps
   deriving (Show, Eq)
 data KeywordKind = Where | Do | Let | In | Case | Of | While | For | Import | Package | Deriving |
-  Class | Object | Trait | Struct | Then | Else
+  Class | Object | Trait | Struct | If | Then | Else
   deriving (Show, Eq)
 data SpecialOps = ArrowOp | MetaHintOp | RangeOp | EqualOp
   deriving (Show, Eq)
@@ -41,6 +41,7 @@ keywording t = case t of
   "object" -> Right Object
   "trait" -> Right Trait
   "struct" -> Right Struct
+  "if" -> Right If
   "then" -> Right Then
   "else" -> Right Else
   _ -> Left t
