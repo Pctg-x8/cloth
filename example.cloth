@@ -1,0 +1,16 @@
+# Cloth Example Script
+
+package HelloWorld where
+
+factorial n :: int -> int = if n == 1 then 1 else n * factorial (n - 1)
+factorial_tailrec :: int -> int -> int
+factorial_tailrec 1 s = s
+factorial_tailrec n s = factorial_tailrec (n - 1) $ n * s
+
+main does
+  System.out.println "hello world!"
+  System.out.println $ "fac 3 = " ++ show (factorial 3)
+  let ft = factorial_tailrec 3
+  System.out.println $ "fac(tailrec) 3 = " ++ show ft
+  System.out.println "checking"
+  assert $ factorial 3 == factorial_tailrec 3

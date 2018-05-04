@@ -8,6 +8,7 @@ import Language.Cloth.Parser
 import Data.Default (def)
 import Data.Either (isRight)
 import Data.Text
+import qualified Data.Text.IO as TIO
 
 main :: IO ()
 main = hspec $ do
@@ -71,6 +72,9 @@ main = hspec $ do
       (const () <$> parseText packageBlock "main :: IO ()") `shouldBe` Right ()
     it "parses type hinted declaration" $
       (const () <$> parseText packageBlock "fn x :: _ -> int = x * 2") `shouldBe` Right ()
+    it "parses example script" $ do
+      f <- TIO.readFile "example.cloth"
+      (const () <$> parseText packageBlock f) `shouldBe` Right ()
 
 testFragment :: Parser (Located a) -> Text -> Either [Located Token] a
 testFragment p = fmap (item . fst) . runParser p . tokenizeAll . intoLocated
