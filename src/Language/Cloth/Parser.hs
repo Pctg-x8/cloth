@@ -52,11 +52,12 @@ parseLayout = flip go [] . lexemes where
   go [] (m : ms) | m /= 0 = (RightBrace :@: Location 0 m) : go [] ms
   blockTerm = [Keyword Else]
 
-packageBlock :: Parser [Located Stmt]
-packageBlock = do
-  decls <- match LeftBrace *> intersperse Semicolon stmt
-  match RightBrace *> return decls
+packageBlock :: Parser [Declaration]
+packageBlock = blocked decl
 
+data Declaration = Declaration (Located Pat) (Maybe Ty) (Located Expr) | AbstractDeclaration Pat Ty
+decl :: Parser Declaration
+decl = Declaration <$> pat <*> pure Nothing <*> ((match (SpecialOp EqualOp) *> expr) <|> doExpr)
 data Ty = IdentT Text | ApplyT Ty Ty deriving (Show, Eq)
 data Stmt = ValueExpr Expr | Binding (Located (Pat, Maybe Ty, Expr)) deriving (Show, Eq)
 stmt :: Parser (Located Stmt)
@@ -66,7 +67,7 @@ stmt = lettings <|> (fmap ValueExpr <$> expr) where
     pat' :@: p <- pat
     expr' :@: _ <- match (SpecialOp EqualOp) *> expr
     return (Binding ((pat', Nothing, expr') :@: p) :@: firstLocation)
-factorExpr, infixExpr, cExpr, applyExpr, expr :: Parser (Located Expr)
+factorExpr, infixExpr, cExpr, doExpr, applyExpr, expr :: Parser (Located Expr)
 expr = infixExpr
 factorExpr = Parser $ \ts -> case ts of
   ((Tok.Ident  t :@: p) : tr) -> Right (Var t :@: p, tr)
@@ -90,11 +91,14 @@ applyExpr = factorExpr >>= recurse where
 infixExpr = ((\(e, ps) -> Infix <$> e <*> pure [(a, b) :@: p | ((a :@: p), (b :@: _)) <- ps]) <$> intercalate1 op cExpr)
   <|> (negop >> fmap Neg <$> cExpr) <|> cExpr
 cExpr = Parser $ \ts -> case ts of
-  ((Tok.Keyword Do :@: p) : tr) -> runParser ((:@: p) <$> DoBlock <$> blocked stmt) tr
+  ((Tok.Keyword Do :@: _) : _) -> runParser doExpr ts
   ((Tok.Keyword If :@: p) : tr) -> runParser
     ((:@: p) <$> (Conditional <$> expr <*> (match (Keyword Then) *> blocked stmt) <*> opt (match (Keyword Else) *> blocked stmt)))
     tr
   _ -> runParser applyExpr ts
+doExpr = do
+  firstLocation <- match $ Keyword Do
+  (:@: firstLocation) <$> (DoBlock <$> blocked stmt)
 
 data Pat = VarP Text | AsP Text (Located Pat) | NumP NumberTok | ListP [Located Pat] | UnitP |
   TupleP [Located Pat] | WildcardP | DataP DataConstructor [Located Pat] | NegativeNumP Tok.NumberTok |
