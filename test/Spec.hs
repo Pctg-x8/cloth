@@ -9,6 +9,7 @@ import Data.Default (def)
 import Data.Either (isRight)
 import Data.Text
 import qualified Data.Text.IO as TIO
+import System.IO
 
 main :: IO ()
 main = hspec $ do
@@ -72,8 +73,9 @@ main = hspec $ do
       (const () <$> parseText packageBlock "main :: IO ()") `shouldBe` Right ()
     it "parses type hinted declaration" $
       (const () <$> parseText packageBlock "fn x :: _ -> int = x * 2") `shouldBe` Right ()
-    it "parses example script" $ do
-      f <- TIO.readFile "example.cloth"
+    it "parses example script" $ withFile "example.cloth" ReadMode $ \h -> do
+      h `hSetEncoding` utf8
+      f <- TIO.hGetContents h
       (const () <$> parseText parseUnit f) `shouldBe` Right ()
 
 testFragment :: Parser (Located a) -> Text -> Either [Located Token] a

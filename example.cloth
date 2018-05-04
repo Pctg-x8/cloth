@@ -1,13 +1,40 @@
 # Cloth Example Script
 
 package HelloWorld where
+  # おなじみ階乗計算 正格評価なのでtailrec版のほうがちょっとだけ効率的
   factorial n :: int -> int = if n == 1 then 1 else n * factorial (n - 1)
-  factorial_tailrec :: int -> int -> int
+  factorial_tailrec :: int -> _ -> int
   factorial_tailrec 1 s = s
   factorial_tailrec n s = factorial_tailrec (n - 1) $ n * s
 
+  # import文
+  import java.lang.*
+  # シンボル別名
+  import nprintln = System.out.println
+  # クラス定義 + trait境界指定 + パターンマッチ可能なコンストラクタ(Scala,Kotlinと同じくletをつけるとself.<ident>で参照可能)
+  pub class cloth.prelude.Show a => ThreadExample a { let rval :: a } where
+    # trait実装(短縮バージョン)
+    impl Runnable.run = System.out.println . show $ self.rval
+  # シングルトンオブジェクト定義
+  pub object Greeter where
+    greet :: () = System.out.println "Hello!"
+  # trait(interface)定義
+  pub trait Show n => GenericGreeter n where
+    greet' :: ()
+  pub class NamedGreeter { let name :: String } where
+    # trait実装(フルバージョン)
+    impl GenericGreeter String where
+      greet' = nprintln $ "Hello " ++ self.name
+
+  # =の代わりにdoes(do)を置くことができる(もちろん<pat> = do { <stmt...> }でも可)
   main does
-    System.out.println "hello world!"
+    Greeter.greet
+    (NamedGreeter "clothlang").greet'                         # 普通の呼び出し
+    (NamedGreeter "clothlang" :: GenericGreeter _).greet'     # interface型にキャスト
+    GenericGreeter.greet' $ NamedGreeter "clothlang"          # UFCS
+    _.greet' $ NamedGreeter "clothlang"                       # UFCSその2 勝手にプレースホルダを推論する
+    let NamedGreeter n = NamedGreeter "clothlang"             # パターンマッチによる分解
+    assert $ "clothlang" == n
     System.out.println $ "fac 3 = " ++ show (factorial 3)
     let ft = factorial_tailrec 3
     System.out.println $ "fac(tailrec) 3 = " ++ show ft
