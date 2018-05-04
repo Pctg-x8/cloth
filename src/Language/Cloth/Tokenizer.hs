@@ -28,6 +28,7 @@ keywording :: Text -> Either Text KeywordKind
 keywording t = case t of
   "where" -> Right Where
   "do" -> Right Do
+  "does" -> Right Do
   "let" -> Right Let
   "in" -> Right In
   "case" -> Right Case

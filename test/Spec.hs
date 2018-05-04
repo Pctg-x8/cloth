@@ -62,9 +62,9 @@ main = hspec $ do
       (isRight $ runParser pat $ tokenizeAll $ intoLocated "Cons 2 :@: p") `shouldBe` True
       (isRight $ runParser pat $ tokenizeAll $ intoLocated "(_ : t0@(TokParse2 a b) : ts)") `shouldBe` True
     it "parses let bindings" $ do
-      (const () <$> parseText packageBlock "main do let c = 2") `shouldBe` Right ()
+      (const () <$> parseText packageBlock "main does let c = 2") `shouldBe` Right ()
     it "parses do block" $ do
-      (const () <$> parseText packageBlock "main do let c = do { let d = 0; d * 3.0 }") `shouldBe` Right ()
+      (const () <$> parseText packageBlock "main does let c = do { let d = 0; d * 3.0 }") `shouldBe` Right ()
     it "parses conditional expr" $
       (const () <$> parseText packageBlock "main = if f x == 2 then 0 else 2") `shouldBe` Right ()
 
