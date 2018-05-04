@@ -67,6 +67,10 @@ main = hspec $ do
       (const () <$> parseText packageBlock "main does let c = do { let d = 0; d * 3.0 }") `shouldBe` Right ()
     it "parses conditional expr" $
       (const () <$> parseText packageBlock "main = if f x == 2 then 0 else 2") `shouldBe` Right ()
+    it "parses abstract declaration" $
+      (const () <$> parseText packageBlock "main :: IO ()") `shouldBe` Right ()
+    it "parses type hinted declaration" $
+      (const () <$> parseText packageBlock "fn x :: _ -> int = x * 2") `shouldBe` Right ()
 
 testFragment :: Parser (Located a) -> Text -> Either [Located Token] a
 testFragment p = fmap (item . fst) . runParser p . tokenizeAll . intoLocated

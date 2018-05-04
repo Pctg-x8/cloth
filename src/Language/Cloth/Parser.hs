@@ -4,7 +4,7 @@ module Language.Cloth.Parser (Expr(..), Pat(..), Stmt(..), parseLayout, expr, pa
 
 import Language.Cloth.Location
 import qualified Language.Cloth.Tokenizer as Tok
-import Language.Cloth.Tokenizer (Token(..), KeywordKind(..), NumberTok, SpecialOps(..))
+import Language.Cloth.Tokenizer (Token(..), KeywordKind(..), NumberTok, SpecialOps(..), PrimitiveTypes(..))
 import Control.Applicative
 import Control.Arrow (first)
 import Control.Monad (void)
@@ -55,13 +55,30 @@ parseLayout = flip go [] . lexemes where
 packageBlock :: Parser [Declaration]
 packageBlock = blocked decl
 
-data Declaration = Declaration (Located Pat) (Maybe Ty) (Located Expr) | AbstractDeclaration (Located Pat) Ty
+data Declaration = Declaration (Located Pat) (Maybe (Located Ty)) (Located Expr) | AbstractDeclaration (Located Pat) (Located Ty)
 instance WithLocation Declaration where
   location (Declaration (_ :@: p) _ _) = p
   location (AbstractDeclaration (_ :@: p) _) = p
 decl :: Parser Declaration
-decl = Declaration <$> pat <*> pure Nothing <*> ((match (SpecialOp EqualOp) *> expr) <|> doExpr)
-data Ty = IdentT Text | ApplyT Ty Ty deriving (Show, Eq)
+decl = 
+  (Declaration <$> pat <*> optv (match (SpecialOp MetaHintOp) *> ty) <*> ((match (SpecialOp EqualOp) *> expr) <|> doExpr)) <|>
+  (AbstractDeclaration <$> pat <*> (match (SpecialOp MetaHintOp) *> ty))
+data Ty = IdentT Text | PrimT PrimitiveTypes | PlaceholderT | ApplyT Ty Ty | ArrowT Ty Ty | TupleT [Located Ty] | UnitT
+  deriving (Show, Eq)
+ty, arrowTy, apTy, factorTy :: Parser (Located Ty)
+ty = arrowTy
+arrowTy = (liftA2 ArrowT <$> apTy <*> (match (SpecialOp ArrowOp) *> arrowTy)) <|> apTy
+apTy = factorTy >>= recurse where
+  recurse lhs = ((liftA2 ApplyT lhs <$> factorTy) >>= recurse) <|> return lhs
+factorTy = Parser $ \ts -> case ts of
+  ((PrimType pty :@: p) : tr) -> Right (PrimT pty :@: p, tr)
+  ((Ident "_" :@: p) : tr) -> Right (PlaceholderT :@: p, tr)
+  ((Ident t :@: p) : tr) -> Right (IdentT t :@: p, tr)
+  ((LeftParenthese :@: p) : tr) -> 
+    let
+      genTuple ts' = case ts' of [] -> UnitT :@: p; [t] -> t; _ -> TupleT ts' :@: p
+    in runParser ((<@> p) <$> (genTuple <$> (opt $ intersperse (Op ",") ty)) <* match RightParenthese) tr
+  _ -> Left ts
 data Stmt = ValueExpr Expr | Binding (Located (Pat, Maybe Ty, Expr)) deriving (Show, Eq)
 stmt :: Parser (Located Stmt)
 stmt = lettings <|> (fmap ValueExpr <$> expr) where

@@ -2,7 +2,7 @@
 
 module Language.Cloth.Tokenizer (
   tokenize, tokenizeAll, Located(..), Location(..), intoLocated, location, item, Token(..), NumberTok(..),
-  KeywordKind(..), SpecialOps(..)
+  KeywordKind(..), SpecialOps(..), PrimitiveTypes(..)
 ) where
 
 import qualified Data.Text as T
@@ -15,36 +15,47 @@ import Language.Cloth.Location
 
 data Token = Number NumberTok | Op Text | Ident Text | EOF | LeftParenthese | RightParenthese | Backquote |
   LeftBracket | RightBracket | LeftBrace | RightBrace | Semicolon | Keyword KeywordKind | Atmark |
-  SpecialOp SpecialOps
+  SpecialOp SpecialOps | PrimType PrimitiveTypes
   deriving (Show, Eq)
 data KeywordKind = Where | Do | Let | In | Case | Of | While | For | Import | Package | Deriving |
   Class | Object | Trait | Struct | If | Then | Else
   deriving (Show, Eq)
+data PrimitiveTypes = Int | Long | Float | Double | Bool | Char | Byte | Short | Word | DWord deriving (Show, Eq)
 data SpecialOps = ArrowOp | MetaHintOp | RangeOp | EqualOp
   deriving (Show, Eq)
 data NumberTok = Decimal Text (Maybe Text) | Hexadecimal Text (Maybe Text) |
   Binary Text (Maybe Text) | Octadecimal Text (Maybe Text) deriving (Show, Eq)
-keywording :: Text -> Either Text KeywordKind
+keywording :: Text -> Either Text Token
 keywording t = case t of
-  "where" -> Right Where
-  "do" -> Right Do
-  "does" -> Right Do
-  "let" -> Right Let
-  "in" -> Right In
-  "case" -> Right Case
-  "of" -> Right Of
-  "while" -> Right While
-  "for" -> Right For
-  "import" -> Right Import
-  "package" -> Right Package
-  "deriving" -> Right Deriving
-  "class" -> Right Class
-  "object" -> Right Object
-  "trait" -> Right Trait
-  "struct" -> Right Struct
-  "if" -> Right If
-  "then" -> Right Then
-  "else" -> Right Else
+  "where" -> Right $ Keyword Where
+  "do" -> Right $ Keyword Do
+  "does" -> Right $ Keyword Do
+  "let" -> Right $ Keyword Let
+  "in" -> Right $ Keyword In
+  "case" -> Right $ Keyword Case
+  "of" -> Right $ Keyword Of
+  "while" -> Right $ Keyword While
+  "for" -> Right $ Keyword For
+  "import" -> Right $ Keyword Import
+  "package" -> Right $ Keyword Package
+  "deriving" -> Right $ Keyword Deriving
+  "class" -> Right $ Keyword Class
+  "object" -> Right $ Keyword Object
+  "trait" -> Right $ Keyword Trait
+  "struct" -> Right $ Keyword Struct
+  "if" -> Right $ Keyword If
+  "then" -> Right $ Keyword Then
+  "else" -> Right $ Keyword Else
+  "bool" -> Right $ PrimType Bool
+  "byte" -> Right $ PrimType Byte
+  "word" -> Right $ PrimType Word
+  "short" -> Right $ PrimType Short
+  "char" -> Right $ PrimType Char
+  "dword" -> Right $ PrimType DWord
+  "int" -> Right $ PrimType Int
+  "long" -> Right $ PrimType Long
+  "float" -> Right $ PrimType Float
+  "double" -> Right $ PrimType Double
   _ -> Left t
 specialOp :: Text -> Either Text SpecialOps
 specialOp t = case t of
@@ -86,7 +97,7 @@ tokparse = CharParser $ \t -> case t of
     | isSymbolChar c ->
       runCharParser (fmap (either Op SpecialOp . specialOp) <$> parseWhile isSymbolChar) t
     | isLower c || isUpper c || c == '_' || c == '\'' ->
-      runCharParser (fmap (either Ident Keyword . keywording) <$>
+      runCharParser (fmap (either Ident id . keywording) <$>
         parseWhile (isLower <||> isUpper <||> isNumber <||> (== '_') <||> (== '\''))) t
     | otherwise -> Left t
   _ -> Left t
