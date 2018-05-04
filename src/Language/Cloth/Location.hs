@@ -1,6 +1,6 @@
 module Language.Cloth.Location(
-  Location(..), Located(..), advanceLeft, advanceLine, location, item, intoLocated, (<@>), changeLocationTo,
-  fstLocation
+  Location(..), Located(..), advanceLeft, advanceLine, item, intoLocated, (<@>), changeLocationTo,
+  fstLocation, WithLocation(..)
 ) where
 
 import Data.Default (Default(..))
@@ -17,8 +17,6 @@ instance Functor Located where fmap f (a :@: b) = f a :@: b
 instance Applicative Located where
   pure v = v :@: def
   (f :@: p) <*> (v :@: _) = (f v) :@: p
-location :: Located a -> Location
-location (_ :@: p) = p
 item :: Located a -> a
 item (v :@: _) = v
 intoLocated :: a -> Located a
@@ -29,3 +27,8 @@ changeLocationTo :: Location -> Located a -> Located a
 changeLocationTo = flip (<@>)
 fstLocation :: (Located a, Located b) -> Located (a, b)
 fstLocation (a :@: p, b :@: _) = (a, b) :@: p
+
+class WithLocation a where
+  location :: a -> Location
+instance WithLocation (Located a) where
+  location (_ :@: p) = p

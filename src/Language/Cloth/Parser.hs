@@ -55,7 +55,10 @@ parseLayout = flip go [] . lexemes where
 packageBlock :: Parser [Declaration]
 packageBlock = blocked decl
 
-data Declaration = Declaration (Located Pat) (Maybe Ty) (Located Expr) | AbstractDeclaration Pat Ty
+data Declaration = Declaration (Located Pat) (Maybe Ty) (Located Expr) | AbstractDeclaration (Located Pat) Ty
+instance WithLocation Declaration where
+  location (Declaration (_ :@: p) _ _) = p
+  location (AbstractDeclaration (_ :@: p) _) = p
 decl :: Parser Declaration
 decl = Declaration <$> pat <*> pure Nothing <*> ((match (SpecialOp EqualOp) *> expr) <|> doExpr)
 data Ty = IdentT Text | ApplyT Ty Ty deriving (Show, Eq)
