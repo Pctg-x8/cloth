@@ -74,7 +74,7 @@ main = hspec $ do
       (const () <$> parseText packageBlock "fn x :: _ -> int = x * 2") `shouldBe` Right ()
     it "parses example script" $ do
       f <- TIO.readFile "example.cloth"
-      (const () <$> parseText packageBlock f) `shouldBe` Right ()
+      (const () <$> parseText parseUnit f) `shouldBe` Right ()
 
 testFragment :: Parser (Located a) -> Text -> Either [Located Token] a
 testFragment p = fmap (item . fst) . runParser p . tokenizeAll . intoLocated

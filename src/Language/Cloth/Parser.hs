@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Language.Cloth.Parser (Expr(..), Pat(..), Stmt(..), parseLayout, expr, pat, packageBlock, Parser(runParser)) where
+module Language.Cloth.Parser (Expr(..), Pat(..), Stmt(..), parseLayout, expr, pat, packageBlock, parseUnit, Parser(runParser)) where
 
 import Language.Cloth.Location
 import qualified Language.Cloth.Tokenizer as Tok
@@ -23,8 +23,9 @@ indent :: Located Lexeme -> Int
 indent = left . location
 -- |Generates hints for parsing the layout
 lexemes :: [Located Token] -> [Located Lexeme]
-lexemes ts = if all (/= (item $ head ts)) [LeftBrace, Keyword Package]
-  then (Bracketed :@: location (head ts)) : lexemes' ts else lexemes' ts where
+lexemes ts = if item (head ts) /= LeftBrace
+  then (Bracketed :@: location (head ts)) : lexemes' ts
+  else lexemes' ts where
     lexemes' :: [Located Token] -> [Located Lexeme]
     lexemes' (t0 : t1 : ts)
       | any (== item t0) blockProvider && item t1 /= LeftBrace
@@ -52,17 +53,27 @@ parseLayout = flip go [] . lexemes where
   go [] (m : ms) | m /= 0 = (RightBrace :@: Location 0 m) : go [] ms
   blockTerm = [Keyword Else]
 
+data ParseUnit = Packaged Text [Declaration] | AnonPackage [Declaration]
 packageBlock :: Parser [Declaration]
+parseUnit = packageBlock
 packageBlock = blocked decl
 
-data Declaration = Declaration (Located Pat) (Maybe (Located Ty)) (Located Expr) | AbstractDeclaration (Located Pat) (Located Ty)
+data Declaration =
+  BindingDecl (Located Pat) (Maybe (Located Ty)) (Located Expr) | AbstractBindingDecl (Located Pat) (Located Ty) |
+  PackageDecl (Located Text) [Declaration]
 instance WithLocation Declaration where
-  location (Declaration (_ :@: p) _ _) = p
-  location (AbstractDeclaration (_ :@: p) _) = p
+  location (BindingDecl (_ :@: p) _ _) = p
+  location (AbstractBindingDecl (_ :@: p) _) = p
+  location (PackageDecl (_ :@: p) _) = p
 decl :: Parser Declaration
-decl = 
-  (Declaration <$> pat <*> optv (match (SpecialOp MetaHintOp) *> ty) <*> ((match (SpecialOp EqualOp) *> expr) <|> doExpr)) <|>
-  (AbstractDeclaration <$> pat <*> (match (SpecialOp MetaHintOp) *> ty))
+decl = Parser (\ts -> case ts of
+  ((Keyword Package :@: _) : tr) -> runParser (PackageDecl <$> (packageName <* match (Keyword Where)) <*> packageBlock) tr
+  _ -> runParser (binding <|> abstractBinding) ts) where
+    packageName = Parser $ \ts -> case ts of
+      ((Ident t :@: p) : tr) -> Right (t :@: p, tr)
+      _ -> Left ts
+    binding = BindingDecl <$> pat <*> optv (match (SpecialOp MetaHintOp) *> ty) <*> ((match (SpecialOp EqualOp) *> expr) <|> doExpr)
+    abstractBinding = AbstractBindingDecl <$> pat <*> (match (SpecialOp MetaHintOp) *> ty)
 data Ty = IdentT Text | PrimT PrimitiveTypes | PlaceholderT | ApplyT Ty Ty | ArrowT Ty Ty | TupleT [Located Ty] | UnitT
   deriving (Show, Eq)
 ty, arrowTy, apTy, factorTy :: Parser (Located Ty)
